@@ -16,7 +16,26 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from mtisAapp import endpoints
 
 urlpatterns = [
+    path('api/v1/story', endpoints.new_story),
+    path('api/v1/question/<int:question_id>', endpoints.question),
+    path('api/v1/answer/<int:question_id>', endpoints.answer),
+
+    path('api/v1/entry/<int:entry_id>', endpoints.get_entry),  # get and delete
+    path('api/v1/entrygroup/<int:entrygroup_id>', endpoints.get_entrygroup),
+    path('api/v1/entry', endpoints.new_entry),
+    path('api/v1/entrygroup/<int:entry_id>', endpoints.new_entrygroup),
+    path('api/v1/entrygroup/<int:entrygroup_id>/mainentry/<int:entry_id>', endpoints.change_mainentry_of_entrygroup),
+    path('api/v1/entrygroups', endpoints.entrygroups),
+
+    path('api/v1/challenge/<int:entry_id>', endpoints.new_challenge),
+    path('api/v1/goal', endpoints.new_goal),  # post and put
+    path('api/v1/goal/<int:goal_id>', endpoints.goal),  # get and delete
+    path('api/v1/goals', endpoints.goals),
+    path('api/v1/goals/active', endpoints.active_goals),
+    path('api/v1/goals/entry/<int:entry_id>', endpoints.entry_goals),
+
     path('admin/', admin.site.urls),
 ]
