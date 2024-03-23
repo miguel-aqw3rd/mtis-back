@@ -19,6 +19,11 @@ from django.urls import path
 from mtisAapp import endpoints
 
 urlpatterns = [
+    path('api/v1/signup', endpoints.signup),
+    path('api/v1/login', endpoints.login),
+    path('api/v1/logout', endpoints.logout),
+    path('api/v1/name', endpoints.change_name),
+
     path('api/v1/story', endpoints.new_story),
     path('api/v1/question/<int:question_id>', endpoints.question),
     path('api/v1/answer/<int:question_id>', endpoints.answer),

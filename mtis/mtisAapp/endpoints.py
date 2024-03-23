@@ -8,6 +8,104 @@ from django.http import JsonResponse
 from .models import *
 
 
+def save_password(password):
+    return bcrypt.hashpw(password.encode('utf8'), bcrypt.gensalt()).decode('utf8')
+
+
+def check_password(user, password):
+    encrypted = user.encrypted_password
+    return bcrypt.checkpw(password.encode('utf-8'), encrypted.encode('utf-8'))
+
+
+@csrf_exempt
+def login(request):
+    if request.method == "PUT":
+        data = json.loads(request.body)
+        username = data.get('username', None)
+        password = data.get('password', None)
+
+        if not username or not password:
+            return JsonResponse({"Error": "Username or password missing"}, status=400)
+        if not User.objects.get(username=username).exists():
+            return JsonResponse({"Error": "User does not exist"}, status=404)
+
+        user = User.objects.get(username=username)
+        if not check_password(user, password):
+            return JsonResponse({"Error": "Incorrect password"}, status=401)
+
+        token = new_token(username)
+        user.token = token
+        user.save()
+        return JsonResponse({"Message": "Login Successful", "token": token}, status=201)
+    else:
+        return JsonResponse({"Error": "Only put"}, status=405)
+
+
+@csrf_exempt
+def signup(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        username = data.get('username', None)
+        email = data.get('email', None)
+        password = data.get('password', None)
+
+        if not username or not password:
+            return JsonResponse({"Error": "Username or password missing"}, status=400)
+        if User.objects.get(username=username).exists():
+            return JsonResponse({"Error": "Username already in use"}, status=409)
+
+        password = save_password(password)
+        user = User(username=username, encrypted_password=password)
+        token = new_token(username)
+        user.token = token
+        if email:
+            user.email = email
+        user.save()
+        return JsonResponse({"Message": "User created", "token": token}, status=201)
+    else:
+        return JsonResponse({"Error": "Only post"}, status=405)
+
+
+@csrf_exempt
+def logout(request):
+    if request.method == "PUT":
+        user = get_user(request)
+        if user == -1:
+            return JsonResponse({"Error": "Invalid or missing token"}, status=401)
+
+        user.token = new_token(user.username + "a pink mockingbird")
+        user.save()
+        return JsonResponse({"Message": "Logout Successful"}, status=200)
+    else:
+        return JsonResponse({"Error": "Only put"}, status=405)
+
+
+def new_token(username):
+    now = str(datetime.now())
+    hash = hashlib.sha256()
+    hash.update((now + username).encode('utf-8'))
+    return hash.hexdigest()[0:30]
+
+
+@csrf_exempt
+def change_name(request):
+    if request.method == "PUT":
+        data = json.loads(request.body)
+        name = data.get('name', None)
+        if not name:
+            return JsonResponse({"Error": "Name missing"}, status=400)
+
+        user = get_user(request)
+        if user == -1:
+            return JsonResponse({"Error": "Invalid or missing token"}, status=401)
+
+        user.name = name
+        user.save()
+        return JsonResponse({"Message": "Name updated successfully"}, status=200)
+    else:
+        return JsonResponse({"Error": "Only put"}, status=405)
+
+
 # Returns the user of the token given in the header of the request
 def get_user(request):  # Throw errors as needed
     auth_token = request.headers.get('auth-token', None)
@@ -19,6 +117,7 @@ def get_user(request):  # Throw errors as needed
         return -1
 
     return user
+
 
 """ The following functions parse recursively a json to save the uploaded story to the database
 The json is expected in this format:
@@ -51,6 +150,9 @@ The json is expected in this format:
 
 The fields nextQa and nextQb are optional
 """
+
+
+@csrf_exempt
 def save_question(json):
     q = json.get("q", None)
     text, a, b = False
@@ -199,7 +301,7 @@ def get_entrygroup(request, entrygroup_id):
 
     if request.method == "GET":
         entries = [group.entry for group in Groups.objects.filter(group=entrygroup)]
-        entries_array = [entry.to_json() for entry in entries if entry!=entrygroup.main]
+        entries_array = [entry.to_json() for entry in entries if entry != entrygroup.main]
 
         return JsonResponse({
             "id": entrygroup.id,
@@ -330,7 +432,7 @@ def entrygroups(request):
         entrygroups = EntryGroup.objects.filter(user=user).order_by("-favorite")
         if level:
             try:
-                level=int(level)
+                level = int(level)
             except ValueError:
                 return JsonResponse({"Error": "Level must be an integer number"}, status=400)
 
@@ -374,7 +476,9 @@ def new_challenge(request, entry_id):
             if user != entry.user:
                 allowed = False
         if not allowed:
-            return JsonResponse({"Error": "You don't have permission to read other users' entries or update their challenges"}, status=401)
+            return JsonResponse(
+                {"Error": "You don't have permission to read other users' entries or update their challenges"},
+                status=401)
 
         # Save
         for e in entries:
@@ -416,11 +520,9 @@ def new_goal(request):
 
         # Save the goal and its associations
         goal = Goal(description=description, frequency=frequency, active=active)
-        goal.save()
-        rel = RelEGU(goal=goal, user=user)
         if entry_id:
-            rel.entry = entry
-        rel.save()
+            goal.entry = entry
+        goal.save()
         return JsonResponse({"Message": "Goal saved"}, status=200)
     else:
         return JsonResponse({"Error": "Only post or put"}, status=405)
@@ -435,8 +537,7 @@ def goal(request, goal_id):
     user = get_user(request)
     if user == -1:
         return JsonResponse({"Error": "Invalid or missing token"}, status=401)
-    rel = RelEGU.objects.get(goal=goal)
-    if user != rel.user:
+    if user != goal.user:
         return JsonResponse({"Error": "You don't have permission to read or modify other users' goals"}, status=401)
 
     if request.method == "GET":
@@ -495,17 +596,15 @@ def goals(request):
                 return JsonResponse({"Error": "You don't have permission to read or modify other users' entries"},
                                     status=401)
 
-        if entry:
-            rels = RelEGU.objects.filter(user=user, entry=entry)
+        if entry_id:
+            goals = Goal.objects.filter(user=user, entry=entry)
         else:
-            rels = RelEGU.objects.filter(user=user)
+            goals = Goal.objects.filter(user=user)
         if active is not None:
-            goals = [rel.goal for rel in rels if rel.goal.active == active]
-        else:
-            goals = [rel.goal for rel in rels]
+            goals = goals.filter(active=active)
 
+        goals = [goal for goal in goals]
         goals_data = [goal.to_json() for goal in goals]
         return JsonResponse({"goals": goals_data}, status=200)
     else:
         return JsonResponse({"Error": "Only get"}, status=405)
-

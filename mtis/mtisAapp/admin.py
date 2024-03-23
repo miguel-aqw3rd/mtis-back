@@ -13,6 +13,5 @@ admin.site.register(Challenge)
 admin.site.register(EntryGroup)
 admin.site.register(Groups)
 admin.site.register(Goal)
-admin.site.register(RelEGU)
 admin.site.register(Banner)
 

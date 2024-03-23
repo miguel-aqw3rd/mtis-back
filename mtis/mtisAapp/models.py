@@ -3,10 +3,11 @@ import datetime
 
 
 class User(models.Model):
-    username = models.CharField(max_length=50)
+    username = models.CharField(max_length=50, unique=True)
     email = models.CharField(max_length=150, null=True)
     encrypted_password = models.CharField(max_length=256, default="1234")
     token = models.CharField(max_length=30, default="1234")
+    name = models.CharField(max_length=75, default="Beautiful Person")
 
 
 class Weights(models.Model):
@@ -94,6 +95,8 @@ class Goal(models.Model):
                                  default="D")  # Coded sthing like.. "W" (weekly), "D" (daily), "3D" (3 times a day)
     active = models.BooleanField(default=True)
     favorite = models.BooleanField(default=False)
+    user = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
+    entry = models.ForeignKey(Entry, null=True, on_delete=models.CASCADE)
 
     def to_json(self):
         return {
@@ -101,14 +104,9 @@ class Goal(models.Model):
             "description": self.description,
             "frequency": self.frequency,
             "active": self.active,
-            "favorite": self.favorite
+            "favorite": self.favorite,
+            "entry_id": self.entry.id
         }
-
-
-class RelEGU(models.Model):  # Relates the goals to the entries of users
-    entry = models.ForeignKey(Entry, on_delete=models.CASCADE)
-    goal = models.ForeignKey(Goal, null=True, on_delete=models.CASCADE)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
 
 
 class Banner(models.Model):
