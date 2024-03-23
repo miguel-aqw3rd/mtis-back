@@ -24,6 +24,7 @@ urlpatterns = [
     path('api/v1/answer/<int:question_id>', endpoints.answer),
 
     path('api/v1/entry/<int:entry_id>', endpoints.get_entry),  # get and delete
+    path('api/v1/entries', endpoints.entries),
     path('api/v1/entrygroup/<int:entrygroup_id>', endpoints.get_entrygroup),
     path('api/v1/entry', endpoints.new_entry),
     path('api/v1/entrygroup/<int:entry_id>', endpoints.new_entrygroup),
@@ -34,8 +35,6 @@ urlpatterns = [
     path('api/v1/goal', endpoints.new_goal),  # post and put
     path('api/v1/goal/<int:goal_id>', endpoints.goal),  # get and delete
     path('api/v1/goals', endpoints.goals),
-    path('api/v1/goals/active', endpoints.active_goals),
-    path('api/v1/goals/entry/<int:entry_id>', endpoints.entry_goals),
 
     path('admin/', admin.site.urls),
 ]

@@ -5,18 +5,91 @@ import bcrypt
 from django.contrib.auth import authenticate
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
-
 from .models import *
 
 
 # Returns the user of the token given in the header of the request
 def get_user(request):  # Throw errors as needed
-    return User.objects.get(id=1)  # Function is a dummy for now
+    auth_token = request.headers.get('auth-token', None)
+    if not auth_token:
+        return -1
+    try:
+        user = User.objects.get(token=auth_token)
+    except User.DoesNotExist:
+        return -1
+
+    return user
+
+""" The following functions parse recursively a json to save the uploaded story to the database
+The json is expected in this format:
+
+{
+"title": ,
+"character": ,
+"q":{
+	"text": ,
+	"a": ,
+	"b": ,
+	"nextQa": "q":{
+			"text": ,
+			"a": ,
+			"b": ,
+			"nextQa": ,
+			"nextQb": ,
+			},
+	"nextQb":  "q":{
+			"text": ,
+			"a": ,
+			"b": ,
+			"nextQa": ,
+			"nextQb": ,
+			},
+
+}
+
+}
+
+The fields nextQa and nextQb are optional
+"""
+def save_question(json):
+    q = json.get("q", None)
+    text, a, b = False
+    if q:
+        text = q.get("text", None)
+        a = q.get("a", None)
+        b = q.get("b", None)
+        nextQa = q.get("nextQa", None)
+        nextQb = q.get("nextQb", None)
+    if not q or not text or not a or not b:
+        return -1
+
+    question = Question(text=text, a=a, b=b)
+    if nextQa:
+        id = save_question(nextQa)
+        if id != -1:
+            question.nextQa = id
+    if nextQb:
+        id = save_question(nextQb)
+        if id != -1:
+            question.nextQb = id
+    question.save()
+    return question.id
 
 
 @csrf_exempt
 def new_story(request):
-    pass
+    json_body = json.loads(request.body)
+    title = json_body.get("title", None)
+    character = json_body.get("character", None)
+    q = json_body.get("q", None)
+    if not title or not character or not q:
+        return JsonResponse({"Error": "Invalid json body"}, status=400)
+
+    # Starts recursively saving questions, starting with the first
+    chapter0 = save_question({"q": q})
+
+    story = Story(title=title, character=character, chapter0=chapter0)
+    return JsonResponse({"Message": "Story saved successfully"}, status=200)
 
 
 def question(request, question_id):
@@ -42,6 +115,8 @@ def answer(request, question_id):
             return JsonResponse({"Error": "Story chapter does not exist"}, status=404)
 
         user = get_user(request)
+        if user == -1:
+            return JsonResponse({"Error": "Invalid or missing token"}, status=401)
         try:
             answer = Answer.objects.get(user=user, question=question)
         except Answer.DoesNotExist:
@@ -64,6 +139,19 @@ def answer(request, question_id):
         return JsonResponse({"Error": "Only post"}, status=405)
 
 
+def entries(request):
+    if request.method == "GET":
+        user = get_user(request)
+        if user == -1:
+            return JsonResponse({"Error": "Invalid or missing token"}, status=401)
+
+        entries = Entry.objects.filter(user=user).order_by("datetime")
+        entries_data = [entry.to_json() for entry in entries]
+        return JsonResponse({"entries": entries_data}, status=200)
+    else:
+        return JsonResponse({"Error": "Only get"}, status=405)
+
+
 def get_entry(request, entry_id):  # also delete
     if request.method == "GET":
         try:
@@ -72,6 +160,8 @@ def get_entry(request, entry_id):  # also delete
             return JsonResponse({"Error": "Entry does not exist"}, status=404)
 
         user = get_user(request)
+        if user == -1:
+            return JsonResponse({"Error": "Invalid or missing token"}, status=401)
         if user != entry.user:
             return JsonResponse({"Error": "You don't have permission to read other users' entries"}, status=401)
 
@@ -84,6 +174,8 @@ def get_entry(request, entry_id):  # also delete
             return JsonResponse({"Error": "Entry does not exist"}, status=404)
 
         user = get_user(request)
+        if user == -1:
+            return JsonResponse({"Error": "Invalid or missing token"}, status=401)
         if user != entry.user:
             return JsonResponse({"Error": "You don't have permission to delete other users' entries"}, status=401)
 
@@ -93,28 +185,33 @@ def get_entry(request, entry_id):  # also delete
         return JsonResponse({"Error": "Only get or delete"}, status=405)
 
 
-
 def get_entrygroup(request, entrygroup_id):
+    try:
+        entrygroup = EntryGroup.objects.get(id=entrygroup_id)
+    except EntryGroup.DoesNotExist:
+        return JsonResponse({"Error": "Entry Group does not exist"}, status=404)
+
+    user = get_user(request)
+    if user == -1:
+        return JsonResponse({"Error": "Invalid or missing token"}, status=401)
+    if user != entrygroup.user:
+        return JsonResponse({"Error": "You don't have permission to read other users' entries"}, status=401)
+
     if request.method == "GET":
-        try:
-            entrygroup = EntryGroup.objects.get(id=entrygroup_id)
-        except EntryGroup.DoesNotExist:
-            return JsonResponse({"Error": "Entry Group does not exist"}, status=404)
-
-        user = get_user(request)
-        if user != entrygroup.user:
-            return JsonResponse({"Error": "You don't have permission to read other users' entries"}, status=401)
-
         entries = [group.entry for group in Groups.objects.filter(group=entrygroup)]
-        entries_array = [entry.to_json() for entry in entries]
+        entries_array = [entry.to_json() for entry in entries if entry!=entrygroup.main]
 
         return JsonResponse({
             "id": entrygroup.id,
             "root": entrygroup.root.to_json(),  # Esto a lo mejor falla
             "main": entrygroup.main.to_json(),  # Esto a lo mejor falla
             "level": entrygroup.level,
+            "favorite": entrygroup.favorite,
             "entries": entries_array
         }, status=200)
+    elif request.method == "DELETE":
+        entrygroup.delete()
+        return JsonResponse({"Message": "Entry Group deleted successfully"})
     else:
         return JsonResponse({"Error": "Only get"}, status=405)
 
@@ -141,6 +238,8 @@ def new_entry(request):
             return JsonResponse({"Error": "Invalid json body. Type and Level must be non-negative numbers"}, status=400)
 
         user = get_user(request)
+        if user == -1:
+            return JsonResponse({"Error": "Invalid or missing token"}, status=401)
         #############################
         if entrygroup_id:
             try:
@@ -151,6 +250,7 @@ def new_entry(request):
                 return JsonResponse({"Error": "You don't have permission to touch other users' entries"}, status=401)
         #################################
         entry = Entry(text=text, type=type, level=level, user=user)
+        entry.datetime = datetime.datetime.now()
         entry.save()
         if entrygroup_id:  # If a valid EntryGroup id is sent as a query parameter, new entry is associated with that Entry Group
             group = Groups(entry=entry, group=entrygroup)
@@ -172,12 +272,16 @@ def new_entrygroup(request, entry_id):
             return JsonResponse({"Error": "Entry does not exist"}, status=404)
 
         user = get_user(request)
+        if user == -1:
+            return JsonResponse({"Error": "Invalid or missing token"}, status=401)
         if user != entry.user:
             return JsonResponse({"Error": "You don't have permission to read other users' entries"}, status=401)
 
         entrygroup = EntryGroup(root=entry, main=entry, user=user)
         entrygroup.level = entry.level + 1  # The Entry Group is a level higher than the root entry
         entrygroup.save()
+        group = Groups(entry=entry, group=entrygroup)  # Save root entry as member of the entry group
+        group.save()
         return JsonResponse({"Message": "EntryGroup created"}, status=200)
 
     else:
@@ -197,6 +301,8 @@ def change_mainentry_of_entrygroup(request, entrygroup_id, entry_id):
             return JsonResponse({"Error": "Entry does not exist"}, status=404)
 
         user = get_user(request)
+        if user == -1:
+            return JsonResponse({"Error": "Invalid or missing token"}, status=401)
         if user != entrygroup.user or user != entry.user:
             return JsonResponse({"Error": "You don't have permission to modify other users' entry groups"}, status=401)
 
@@ -210,17 +316,27 @@ def change_mainentry_of_entrygroup(request, entrygroup_id, entry_id):
 def entrygroups(request):
     if request.method == "GET":
         level = request.GET.get("level", None)  # Optional filters per entry group level
-        user = get_user(request)
+        favorites = request.GET.get("favorites", False)
 
+        user = get_user(request)
+        if user == -1:
+            return JsonResponse({"Error": "Invalid or missing token"}, status=401)
+
+        try:
+            favorites = bool(favorites)
+        except ValueError:
+            return JsonResponse({"Error": "Favorites query parameter must be boolean"}, status=400)
+
+        entrygroups = EntryGroup.objects.filter(user=user).order_by("-favorite")
         if level:
             try:
                 level=int(level)
             except ValueError:
                 return JsonResponse({"Error": "Level must be an integer number"}, status=400)
 
-            entrygroups = EntryGroup.objects.filter(user=user, level=level)
-        else:
-            entrygroups = EntryGroup.objects.filter(user=user)
+            entrygroups = entrygroups.filter(level=level)
+        if favorites:
+            entrygroups = entrygroups.filter(favorite=True)
 
         entrygroups_array = [group.to_json() for group in entrygroups]
         return JsonResponse({"entrygroups": entrygroups_array}, status=200)
@@ -250,6 +366,8 @@ def new_challenge(request, entry_id):
 
         # Check permission
         user = get_user(request)
+        if user == -1:
+            return JsonResponse({"Error": "Invalid or missing token"}, status=401)
         if user != entry.user:
             allowed = False
         for entry in entries:
@@ -286,6 +404,8 @@ def new_goal(request):
                 return JsonResponse({"Error": "Invalid json body"}, status=400)
 
         user = get_user(request)
+        if user == -1:
+            return JsonResponse({"Error": "Invalid or missing token"}, status=401)
         if entry_id:
             try:
                 entry = Entry.objects.get(id=entry_id)
@@ -313,6 +433,8 @@ def goal(request, goal_id):
     except Goal.DoesNotExist:
         return JsonResponse({"Error": "Goal does not exist"}, status=404)
     user = get_user(request)
+    if user == -1:
+        return JsonResponse({"Error": "Invalid or missing token"}, status=401)
     rel = RelEGU.objects.get(goal=goal)
     if user != rel.user:
         return JsonResponse({"Error": "You don't have permission to read or modify other users' goals"}, status=401)
@@ -348,39 +470,42 @@ def goal(request, goal_id):
 
 def goals(request):
     if request.method == "GET":
+        active = request.GET.get("active", None)
+        entry_id = request.GET.get("entry", None)
+        if active:
+            try:
+                active = bool(active)
+            except ValueError:
+                return JsonResponse({"Error": "Invalid query parameter. Active must be boolean"}, status=400)
+
         user = get_user(request)
-        rels = RelEGU.objects.filter(user=user)
-        goals = [rel.goal for rel in rels]
+        if user == -1:
+            return JsonResponse({"Error": "Invalid or missing token"}, status=401)
+
+        if entry_id:
+            try:
+                entry_id = int(entry_id)
+            except ValueError:
+                return JsonResponse({"Error": "Invalid query parameter. Entry must be a number"}, status=400)
+            try:
+                entry = Entry.objects.get(id=entry_id)
+            except Entry.DoesNotExist:
+                return JsonResponse({"Error": "Entry does not exist"}, status=404)
+            if user != entry.user:
+                return JsonResponse({"Error": "You don't have permission to read or modify other users' entries"},
+                                    status=401)
+
+        if entry:
+            rels = RelEGU.objects.filter(user=user, entry=entry)
+        else:
+            rels = RelEGU.objects.filter(user=user)
+        if active is not None:
+            goals = [rel.goal for rel in rels if rel.goal.active == active]
+        else:
+            goals = [rel.goal for rel in rels]
+
         goals_data = [goal.to_json() for goal in goals]
         return JsonResponse({"goals": goals_data}, status=200)
     else:
         return JsonResponse({"Error": "Only get"}, status=405)
 
-
-def active_goals(request):
-    if request.method == "GET":
-        user = get_user(request)
-        rels = RelEGU.objects.filter(user=user)
-        goals = [rel.goal for rel in rels if rel.goal.active]
-        goals_data = [goal.to_json() for goal in goals]
-        return JsonResponse({"goals": goals_data}, status=200)
-    else:
-        return JsonResponse({"Error": "Only get"}, status=405)
-
-
-def entry_goals(request, entry_id):
-    if request.method == "GET":
-        try:
-            entry = Entry.objects.get(id=entry_id)
-        except Entry.DoesNotExist:
-            return JsonResponse({"Error": "Entry does not exist"}, status=404)
-        user = get_user(request)
-        if user != entry.user:
-            return JsonResponse({"Error": "You don't have permission to read or modify other users' entries"}, status=401)
-
-        rels = RelEGU.objects.filter(user=user, entry=entry)
-        goals = [rel.goal for rel in rels]
-        goals_data = [goal.to_json() for goal in goals]
-        return JsonResponse({"goals": goals_data}, status=200)
-    else:
-        return JsonResponse({"Error": "Only get"}, status=405)

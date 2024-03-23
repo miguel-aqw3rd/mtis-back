@@ -1,4 +1,5 @@
 from django.db import models
+import datetime
 
 
 class User(models.Model):
@@ -50,6 +51,7 @@ class Entry(models.Model):
     type = models.IntegerField(default=0)
     level = models.IntegerField(default=0)
     user = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
+    datetime = models.DateTimeField(default=datetime.datetime.now())
 
     def to_json(self):
         return {
@@ -98,7 +100,8 @@ class Goal(models.Model):
             "id": self.id,
             "description": self.description,
             "frequency": self.frequency,
-            "active": self.active
+            "active": self.active,
+            "favorite": self.favorite
         }
 
 
