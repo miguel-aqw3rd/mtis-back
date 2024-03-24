@@ -22,10 +22,11 @@ class Question(models.Model):
     b = models.TextField()
     nextQa = models.IntegerField(null=True)  # Represents the id of the chapter/question that follows the choice of A
     nextQb = models.IntegerField(null=True)  # Represents the id of the chapter/question that follows the choice of B
-    weights = models.ForeignKey(Weights, on_delete=models.CASCADE)
+    weights = models.ForeignKey(Weights, null=True, on_delete=models.CASCADE)
 
     def to_json(self):
         return {
+            "id": self.id,
             "text": self.text,
             "a": self.a,
             "b": self.b,
@@ -80,7 +81,8 @@ class EntryGroup(models.Model):
             "id": self.id,
             "root_id": self.root.id,
             "main": self.main.to_json(),
-            "level": self.level
+            "level": self.level,
+            "favorite": self.favorite
         }
 
 
@@ -99,14 +101,23 @@ class Goal(models.Model):
     entry = models.ForeignKey(Entry, null=True, on_delete=models.CASCADE)
 
     def to_json(self):
-        return {
-            "id": self.id,
-            "description": self.description,
-            "frequency": self.frequency,
-            "active": self.active,
-            "favorite": self.favorite,
-            "entry_id": self.entry.id
-        }
+        if self.entry is not None:
+            return {
+                "id": self.id,
+                "description": self.description,
+                "frequency": self.frequency,
+                "active": self.active,
+                "favorite": self.favorite,
+                "entry_id": self.entry.id
+            }
+        else:
+            return {
+                "id": self.id,
+                "description": self.description,
+                "frequency": self.frequency,
+                "active": self.active,
+                "favorite": self.favorite
+            }
 
 
 class Banner(models.Model):

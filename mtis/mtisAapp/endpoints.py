@@ -26,7 +26,7 @@ def login(request):
 
         if not username or not password:
             return JsonResponse({"Error": "Username or password missing"}, status=400)
-        if not User.objects.get(username=username).exists():
+        if not User.objects.filter(username=username).exists():
             return JsonResponse({"Error": "User does not exist"}, status=404)
 
         user = User.objects.get(username=username)
@@ -51,7 +51,7 @@ def signup(request):
 
         if not username or not password:
             return JsonResponse({"Error": "Username or password missing"}, status=400)
-        if User.objects.get(username=username).exists():
+        if User.objects.filter(username=username).exists():
             return JsonResponse({"Error": "Username already in use"}, status=409)
 
         password = save_password(password)
@@ -81,7 +81,7 @@ def logout(request):
 
 
 def new_token(username):
-    now = str(datetime.now())
+    now = str(datetime.datetime.now())
     hash = hashlib.sha256()
     hash.update((now + username).encode('utf-8'))
     return hash.hexdigest()[0:30]
@@ -208,7 +208,7 @@ def question(request, question_id):
 @csrf_exempt
 def answer(request, question_id):
     if request.method == "POST":
-        X = request.POST.get("answer", None)
+        X = request.GET.get("answer", None)
         if not X:
             return JsonResponse({"Error": "Invalid answer"}, status=400)
         try:
@@ -236,7 +236,7 @@ def answer(request, question_id):
             return JsonResponse({"Error": "Invalid answer"}, status=400)
 
         answer.save()
-        return JsonResponse({"Message": "Instance created"}, status=200)
+        return JsonResponse({"Message": "Answer saved"}, status=200)
     else:
         return JsonResponse({"Error": "Only post"}, status=405)
 
@@ -254,39 +254,30 @@ def entries(request):
         return JsonResponse({"Error": "Only get"}, status=405)
 
 
+@csrf_exempt
 def get_entry(request, entry_id):  # also delete
+    try:
+        entry = Entry.objects.get(id=entry_id)
+    except Entry.DoesNotExist:
+        return JsonResponse({"Error": "Entry does not exist"}, status=404)
+
+    user = get_user(request)
+    if user == -1:
+        return JsonResponse({"Error": "Invalid or missing token"}, status=401)
+    if user != entry.user:
+        return JsonResponse({"Error": "You don't have permission to read other users' entries"}, status=401)
+
     if request.method == "GET":
-        try:
-            entry = Entry.objects.get(id=entry_id)
-        except Entry.DoesNotExist:
-            return JsonResponse({"Error": "Entry does not exist"}, status=404)
-
-        user = get_user(request)
-        if user == -1:
-            return JsonResponse({"Error": "Invalid or missing token"}, status=401)
-        if user != entry.user:
-            return JsonResponse({"Error": "You don't have permission to read other users' entries"}, status=401)
-
         data = entry.to_json()
         return JsonResponse(data, status=200)
     elif request.method == "DELETE":
-        try:
-            entry = Entry.objects.get(id=entry_id)
-        except Entry.DoesNotExist:
-            return JsonResponse({"Error": "Entry does not exist"}, status=404)
-
-        user = get_user(request)
-        if user == -1:
-            return JsonResponse({"Error": "Invalid or missing token"}, status=401)
-        if user != entry.user:
-            return JsonResponse({"Error": "You don't have permission to delete other users' entries"}, status=401)
-
         entry.delete()
         return JsonResponse({"Message": "Entry deleted successfully"}, status=200)
     else:
         return JsonResponse({"Error": "Only get or delete"}, status=405)
 
 
+@csrf_exempt
 def get_entrygroup(request, entrygroup_id):
     try:
         entrygroup = EntryGroup.objects.get(id=entrygroup_id)
@@ -305,8 +296,8 @@ def get_entrygroup(request, entrygroup_id):
 
         return JsonResponse({
             "id": entrygroup.id,
-            "root": entrygroup.root.to_json(),  # Esto a lo mejor falla
-            "main": entrygroup.main.to_json(),  # Esto a lo mejor falla
+            "root": entrygroup.root.to_json(),
+            "main": entrygroup.main.to_json(),
             "level": entrygroup.level,
             "favorite": entrygroup.favorite,
             "entries": entries_array
@@ -322,13 +313,13 @@ def get_entrygroup(request, entrygroup_id):
 def new_entry(request):
     if request.method == "POST":
         # Optional: associated entry group
-        entrygroup_id = request.POST.get("entrygroup", None)
+        entrygroup_id = request.GET.get("entrygroup", None)
 
         json_body = json.loads(request.body)
         text = json_body.get("text", None)
         type = json_body.get("type", None)
         level = json_body.get("level", None)
-        if not text or not type or not level:
+        if text is None or type is None or level is None:
             return JsonResponse({"Error": "Invalid json body"}, status=400)
 
         try:
@@ -418,16 +409,19 @@ def change_mainentry_of_entrygroup(request, entrygroup_id, entry_id):
 def entrygroups(request):
     if request.method == "GET":
         level = request.GET.get("level", None)  # Optional filters per entry group level
-        favorites = request.GET.get("favorites", False)
+        favorites = request.GET.get("favorites", None)
 
         user = get_user(request)
         if user == -1:
             return JsonResponse({"Error": "Invalid or missing token"}, status=401)
 
-        try:
-            favorites = bool(favorites)
-        except ValueError:
-            return JsonResponse({"Error": "Favorites query parameter must be boolean"}, status=400)
+        if favorites is not None:
+            if favorites == "True" or favorites == "true":
+                favorites = True
+            elif favorites == "False" or favorites == "false":
+                favorites = False
+            else:
+                return JsonResponse({"Error": "Favorites query parameter must be boolean"}, status=400)
 
         entrygroups = EntryGroup.objects.filter(user=user).order_by("-favorite")
         if level:
@@ -437,8 +431,8 @@ def entrygroups(request):
                 return JsonResponse({"Error": "Level must be an integer number"}, status=400)
 
             entrygroups = entrygroups.filter(level=level)
-        if favorites:
-            entrygroups = entrygroups.filter(favorite=True)
+        if favorites is not None:
+            entrygroups = entrygroups.filter(favorite=favorites)
 
         entrygroups_array = [group.to_json() for group in entrygroups]
         return JsonResponse({"entrygroups": entrygroups_array}, status=200)
@@ -451,17 +445,17 @@ def new_challenge(request, entry_id):
     if request.method == "POST":
         # Check the existence of the given entry and the credentials
         allowed = True
-        entries_ids = request.POST.get("to", None)
+        entries_ids = request.GET.get("to", None)
         if not entries_ids:
             return JsonResponse({"Error": "Missing query parameter: entries to challenge"}, status=400)
         try:
             # Entry ids come separated by plus signs in the query
-            entries_ids = [int(id) for id in entries_ids.split("+")]
+            entries_ids = [int(id) for id in entries_ids.split(" ")]
         except ValueError:
             return JsonResponse({"Error": "Formating error in query parameter"}, status=400)
         try:
             # Check if all the corresponding entries exist
-            entry = Entry.objects.get(id=entry_id)
+            entry_challenge = Entry.objects.get(id=entry_id)
             entries = [Entry.objects.get(id=entry_id) for entry_id in entries_ids]
         except Entry.DoesNotExist:
             return JsonResponse({"Error": "Entry does not exist"}, status=404)
@@ -470,7 +464,7 @@ def new_challenge(request, entry_id):
         user = get_user(request)
         if user == -1:
             return JsonResponse({"Error": "Invalid or missing token"}, status=401)
-        if user != entry.user:
+        if user != entry_challenge.user:
             allowed = False
         for entry in entries:
             if user != entry.user:
@@ -482,7 +476,7 @@ def new_challenge(request, entry_id):
 
         # Save
         for e in entries:
-            challenge = Challenge(challenger=entry, in_question=e)
+            challenge = Challenge(challenger=entry_challenge, in_question=e)
             challenge.save()
         return JsonResponse({"Message": "Challenges updated successfully"}, status=200)
     else:
@@ -493,19 +487,19 @@ def new_challenge(request, entry_id):
 def new_goal(request):
     if request.method == "POST":
         # Optional: associated entry to the goal
-        entry_id = request.POST.get("entry", None)
+        entry_id = request.GET.get("entry", None)
 
         json_body = json.loads(request.body)
         description = json_body.get("description", None)
         frequency = json_body.get("frequency", "D")
         active = json_body.get("active", True)
+        favorite = json_body.get("favorite", False)
         if not description:
             return JsonResponse({"Error": "Invalid json body"}, status=400)
-        if active:
-            try:
-                active = bool(active)
-            except ValueError:
-                return JsonResponse({"Error": "Invalid json body"}, status=400)
+        if not isinstance(active, bool):
+            return JsonResponse({"Error": "Invalid json body. Field 'active' must be boolean"}, status=400)
+        if not isinstance(favorite, bool):
+            return JsonResponse({"Error": "Invalid json body. Field 'favorite' must be boolean"}, status=400)
 
         user = get_user(request)
         if user == -1:
@@ -519,7 +513,9 @@ def new_goal(request):
                 return JsonResponse({"Error": "You don't have permission to read other users' entries"}, status=401)
 
         # Save the goal and its associations
-        goal = Goal(description=description, frequency=frequency, active=active)
+        goal = Goal(description=description, frequency=frequency, active=active, user=user)
+        if favorite:
+            goal.favorite = favorite
         if entry_id:
             goal.entry = entry
         goal.save()
@@ -547,11 +543,13 @@ def goal(request, goal_id):
         description = json_body.get("description", None)
         frequency = json_body.get("frequency", None)
         active = json_body.get("active", None)
-        if active:
-            try:
-                active = bool(active)
-            except ValueError:
-                return JsonResponse({"Error": "Invalid json body"}, status=400)
+        favorite = json_body.get("favorite", None)
+        if active is not None:
+            if not isinstance(active, bool):
+                return JsonResponse({"Error": "Invalid json body. Field 'active' must be boolean"}, status=400)
+        if favorite is not None:
+            if not isinstance(favorite, bool):
+                return JsonResponse({"Error": "Invalid json body. Field 'favorite' must be boolean"}, status=400)
 
         # Update the goal
         if description:
@@ -560,8 +558,11 @@ def goal(request, goal_id):
             goal.frequency = frequency
         if active is not None:
             goal.active = active
+        if favorite is not None:
+            goal.favorite = favorite
 
         goal.save()
+        return JsonResponse({"Message": "Goal updated"}, status=200)
     elif request.method == "DELETE":
         goal.delete()
         return JsonResponse({"Message": "Goal deleted"}, status=200)
@@ -573,11 +574,21 @@ def goals(request):
     if request.method == "GET":
         active = request.GET.get("active", None)
         entry_id = request.GET.get("entry", None)
-        if active:
-            try:
-                active = bool(active)
-            except ValueError:
+        favorite = request.GET.get("favorite", None)
+        if active is not None:
+            if active == "True" or active == "true":
+                active = True
+            elif active == "False" or active == "false":
+                active = False
+            else:
                 return JsonResponse({"Error": "Invalid query parameter. Active must be boolean"}, status=400)
+        if favorite is not None:
+            if favorite == "True" or favorite == "true":
+                favorite = True
+            elif favorite == "False" or favorite == "false":
+                favorite = False
+            else:
+                return JsonResponse({"Error": "Invalid query parameter. Favorite must be boolean"}, status=400)
 
         user = get_user(request)
         if user == -1:
@@ -602,6 +613,8 @@ def goals(request):
             goals = Goal.objects.filter(user=user)
         if active is not None:
             goals = goals.filter(active=active)
+        if favorite is not None:
+            goals = goals.filter(favorite=favorite)
 
         goals = [goal for goal in goals]
         goals_data = [goal.to_json() for goal in goals]

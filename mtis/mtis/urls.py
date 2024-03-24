@@ -32,7 +32,7 @@ urlpatterns = [
     path('api/v1/entries', endpoints.entries),
     path('api/v1/entrygroup/<int:entrygroup_id>', endpoints.get_entrygroup),
     path('api/v1/entry', endpoints.new_entry),
-    path('api/v1/entrygroup/<int:entry_id>', endpoints.new_entrygroup),
+    path('api/v1/entrygroup/entry/<int:entry_id>', endpoints.new_entrygroup),
     path('api/v1/entrygroup/<int:entrygroup_id>/mainentry/<int:entry_id>', endpoints.change_mainentry_of_entrygroup),
     path('api/v1/entrygroups', endpoints.entrygroups),
 
