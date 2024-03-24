@@ -125,18 +125,18 @@ The json is expected in this format:
 {
 "title": ,
 "character": ,
-"q":{
+"story":{
 	"text": ,
 	"a": ,
 	"b": ,
-	"nextQa": "q":{
+	"nextQa":{
 			"text": ,
 			"a": ,
 			"b": ,
 			"nextQa": ,
 			"nextQb": ,
 			},
-	"nextQb":  "q":{
+	"nextQb":{
 			"text": ,
 			"a": ,
 			"b": ,
@@ -154,15 +154,12 @@ The fields nextQa and nextQb are optional
 
 @csrf_exempt
 def save_question(json):
-    q = json.get("q", None)
-    text, a, b = False
-    if q:
-        text = q.get("text", None)
-        a = q.get("a", None)
-        b = q.get("b", None)
-        nextQa = q.get("nextQa", None)
-        nextQb = q.get("nextQb", None)
-    if not q or not text or not a or not b:
+    text = json.get("text", None)
+    a = json.get("a", None)
+    b = json.get("b", None)
+    nextQa = json.get("nextQa", None)
+    nextQb = json.get("nextQb", None)
+    if not text or not a or not b:
         return -1
 
     question = Question(text=text, a=a, b=b)
@@ -183,14 +180,16 @@ def new_story(request):
     json_body = json.loads(request.body)
     title = json_body.get("title", None)
     character = json_body.get("character", None)
-    q = json_body.get("q", None)
-    if not title or not character or not q:
+    story_json = json_body.get("story", None)
+    if not title or not character or not story_json:
         return JsonResponse({"Error": "Invalid json body"}, status=400)
 
     # Starts recursively saving questions, starting with the first
-    chapter0 = save_question({"q": q})
+    chapter0_id = save_question(story_json)
+    chapter0 = Question.objects.get(id=chapter0_id)
 
     story = Story(title=title, character=character, chapter0=chapter0)
+    story.save()
     return JsonResponse({"Message": "Story saved successfully"}, status=200)
 
 
