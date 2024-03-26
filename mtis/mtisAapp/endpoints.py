@@ -343,6 +343,8 @@ def new_entry(request):
         #################################
         entry = Entry(text=text, type=type, level=level, user=user)
         entry.datetime = datetime.datetime.now()
+        if entrygroup_id:
+            entry.level = entrygroup.level  # The level of entry is default 0, or the same as the level of its entrygroup
         entry.save()
         if entrygroup_id:  # If a valid EntryGroup id is sent as a query parameter, new entry is associated with that Entry Group
             group = Groups(entry=entry, group=entrygroup)
@@ -369,11 +371,17 @@ def new_entrygroup(request, entry_id):
         if user != entry.user:
             return JsonResponse({"Error": "You don't have permission to read other users' entries"}, status=401)
 
+        if entry.entrygroup_child is not None:
+            return JsonResponse({"Error": "There is already an entry group associated with this entry"}, status=409)
+
         entrygroup = EntryGroup(root=entry, main=entry, user=user)
         entrygroup.level = entry.level + 1  # The Entry Group is a level higher than the root entry
         entrygroup.save()
         group = Groups(entry=entry, group=entrygroup)  # Save root entry as member of the entry group
         group.save()
+        entry.entrygroup_child = entrygroup  # Save the entrygroup as the child of this entry
+        entry.save()
+
         return JsonResponse({"Message": "EntryGroup created"}, status=200)
 
     else:

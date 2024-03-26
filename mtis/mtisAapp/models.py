@@ -1,3 +1,4 @@
+from django.apps import apps
 from django.db import models
 import datetime
 
@@ -53,15 +54,19 @@ class Entry(models.Model):
     type = models.IntegerField(default=0)
     level = models.IntegerField(default=0)
     user = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
-    datetime = models.DateTimeField(default=datetime.datetime.now())
+    datetime = models.DateTimeField(default=datetime.datetime(2020, 10, 14))
+    entrygroup_child = models.ForeignKey("EntryGroup", related_name="child_entrygroup", null=True, on_delete=models.DO_NOTHING)
 
     def to_json(self):
-        return {
+        json = {
             "id": self.id,
             "text": self.text,
             "type": self.type,
             "level": self.level
         }
+        if self.entrygroup_child is not None:
+            json.update({"child_entrygroup_id": self.entrygroup_child.id})
+        return json
 
 
 class Challenge(models.Model):
@@ -101,25 +106,20 @@ class Goal(models.Model):
     entry = models.ForeignKey(Entry, null=True, on_delete=models.CASCADE)
 
     def to_json(self):
-        if self.entry is not None:
-            return {
-                "id": self.id,
-                "description": self.description,
-                "frequency": self.frequency,
-                "active": self.active,
-                "favorite": self.favorite,
-                "entry_id": self.entry.id
-            }
-        else:
-            return {
+        json = {
                 "id": self.id,
                 "description": self.description,
                 "frequency": self.frequency,
                 "active": self.active,
                 "favorite": self.favorite
             }
+        if self.entry is not None:
+            json.update({"entry_id": self.entry.id})
+        return json
 
 
 class Banner(models.Model):
     text = models.TextField()
     weights = models.ForeignKey(Weights, on_delete=models.CASCADE)
+
+
