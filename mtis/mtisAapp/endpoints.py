@@ -413,6 +413,27 @@ def change_mainentry_of_entrygroup(request, entrygroup_id, entry_id):
         return JsonResponse({"Error": "Only put"}, status=405)
 
 
+@csrf_exempt
+def favorite_entrygroup(request, entrygroup_id):
+    if request.method == "PUT":
+        try:
+            entrygroup = EntryGroup.objects.get(id=entrygroup_id)
+        except EntryGroup.DoesNotExist:
+            return JsonResponse({"Error": "Entry Group does not exist"}, status=404)
+
+        user = get_user(request)
+        if user == -1:
+            return JsonResponse({"Error": "Invalid or missing token"}, status=401)
+        if user != entrygroup.user:
+            return JsonResponse({"Error": "You don't have permission to modify other users' entry groups"}, status=401)
+
+        entrygroup.favorite = not entrygroup.favorite  # Switches the "Favorite" boolean
+        entrygroup.save()
+        return JsonResponse({"Message": "Entry Group updated"}, status=200)
+    else:
+        return JsonResponse({"Error": "Only put"}, status=405)
+
+
 def entrygroups(request):
     if request.method == "GET":
         level = request.GET.get("level", None)  # Optional filters per entry group level
@@ -483,8 +504,8 @@ def new_challenge(request, entry_id):
 
         # Save
         for e in entries:
-            challenge = Challenge(challenger=entry_challenge, in_question=e)
-            challenge.save()
+            e.entry_challenger = entry_challenge
+            e.save()
         return JsonResponse({"Message": "Challenges updated successfully"}, status=200)
     else:
         return JsonResponse({"Error": "Only post"}, status=405)

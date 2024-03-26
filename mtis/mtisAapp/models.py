@@ -7,7 +7,7 @@ class User(models.Model):
     username = models.CharField(max_length=50, unique=True)
     email = models.CharField(max_length=150, null=True)
     encrypted_password = models.CharField(max_length=256, default="1234")
-    token = models.CharField(max_length=30, default="1234")
+    token = models.CharField(max_length=30, null=True, unique=True)
     name = models.CharField(max_length=75, default="Beautiful Person")
 
 
@@ -55,7 +55,8 @@ class Entry(models.Model):
     level = models.IntegerField(default=0)
     user = models.ForeignKey(User, null=True, on_delete=models.CASCADE)
     datetime = models.DateTimeField(default=datetime.datetime(2020, 10, 14))
-    entrygroup_child = models.ForeignKey("EntryGroup", related_name="child_entrygroup", null=True, on_delete=models.DO_NOTHING)
+    entrygroup_child = models.ForeignKey("EntryGroup", null=True, on_delete=models.DO_NOTHING)
+    entry_challenger = models.ForeignKey("Entry", null=True, on_delete=models.DO_NOTHING)
 
     def to_json(self):
         json = {
@@ -66,12 +67,9 @@ class Entry(models.Model):
         }
         if self.entrygroup_child is not None:
             json.update({"child_entrygroup_id": self.entrygroup_child.id})
+        if self.entry_challenger is not None:
+            json.update({"entry_challenger_id": self.entry_challenger.id})
         return json
-
-
-class Challenge(models.Model):
-    challenger = models.ForeignKey(Entry, related_name="challenger_challenge", on_delete=models.CASCADE)
-    in_question = models.ForeignKey(Entry, related_name="in_question_challenge", on_delete=models.CASCADE)
 
 
 class EntryGroup(models.Model):
