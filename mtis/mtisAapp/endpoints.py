@@ -438,6 +438,7 @@ def entrygroups(request):
     if request.method == "GET":
         level = request.GET.get("level", None)  # Optional filters per entry group level
         favorites = request.GET.get("favorites", None)
+        parent_entrygroup_id = request.GET.get("entrygroup", None)
 
         user = get_user(request)
         if user == -1:
@@ -461,6 +462,20 @@ def entrygroups(request):
             entrygroups = entrygroups.filter(level=level)
         if favorites is not None:
             entrygroups = entrygroups.filter(favorite=favorites)
+        if parent_entrygroup_id:
+            try:
+                parent_entrygroup_id = int(parent_entrygroup_id)
+            except ValueError:
+                return JsonResponse({"Error": "Level must be an integer number"}, status=400)
+            try:
+                parent_entrygroup = EntryGroup.objects.get(id=parent_entrygroup_id)
+            except EntryGroup.DoesNotExist:
+                return JsonResponse({"Error": "EntryGroup does not exist"}, status=404)
+            entries = [group.entry for group in Groups.objects.filter(group=parent_entrygroup)]  # List of ALL entries of the entrygroup
+            child_entrygroups = [entry.entrygroup_child for entry in entries if entry != parent_entrygroup.root]
+            # Intersection: of the filtered entrygroups, which are children of the entries of the entrygroup (not counting root entry)?
+            # Flexible but not very efficient... To be improved
+            entrygroups = set(entrygroups).intersection(set(child_entrygroups))
 
         entrygroups_array = [group.to_json() for group in entrygroups]
         return JsonResponse({"entrygroups": entrygroups_array}, status=200)
