@@ -1,5 +1,6 @@
 import hashlib
 import json
+import random
 from datetime import datetime, timezone
 import bcrypt
 from django.contrib.auth import authenticate
@@ -191,6 +192,25 @@ def new_story(request):
     story = Story(title=title, character=character, chapter0=chapter0)
     story.save()
     return JsonResponse({"Message": "Story saved successfully"}, status=200)
+
+
+def get_story(request, story_id):
+    if request.method == "GET":
+        try:
+            story = Story.objects.get(id=story_id)
+        except Story.DoesNotExist:
+            return JsonResponse({"Error": "Story does not exist"}, status=404)
+
+        data = story.to_json()
+        return JsonResponse(data, status=200)
+
+
+def random_story(request):
+    if request.method != "GET":
+        return JsonResponse({"Error": "Only get"}, status=405)
+    stories = Story.objects.all()
+    story = random.choice(stories)
+    return JsonResponse(story.to_json(), status=200)
 
 
 def question(request, question_id):

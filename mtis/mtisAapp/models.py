@@ -44,9 +44,21 @@ class Answer(models.Model):
 
 
 class Story(models.Model):
-    title = models.CharField(max_length=100, default="Peaky Blinders")
-    character = models.CharField(max_length=50, default="Tommy")
+    title = models.CharField(max_length=100, default="F*ck Mondays")
+    character = models.CharField(max_length=50, default="Garfield")
+    author = models.CharField(max_length=50, default="Homer")
+    category = models.CharField(max_length=50, default="Normal")
     chapter0 = models.ForeignKey(Question, on_delete=models.CASCADE)
+    image = models.ImageField()
+
+    def to_json(self):
+        return {
+            "id": self.id,
+            "title": self.title,
+            "character": self.character,
+            "author": self.author,
+            "chapter0": self.chapter0,
+        }
 
 
 class Entry(models.Model):
@@ -105,12 +117,12 @@ class Goal(models.Model):
 
     def to_json(self):
         json = {
-                "id": self.id,
-                "description": self.description,
-                "frequency": self.frequency,
-                "active": self.active,
-                "favorite": self.favorite
-            }
+            "id": self.id,
+            "description": self.description,
+            "frequency": self.frequency,
+            "active": self.active,
+            "favorite": self.favorite
+        }
         if self.entry is not None:
             json.update({"entry_id": self.entry.id})
         return json
@@ -119,5 +131,3 @@ class Goal(models.Model):
 class Banner(models.Model):
     text = models.TextField()
     weights = models.ForeignKey(Weights, on_delete=models.CASCADE)
-
-
