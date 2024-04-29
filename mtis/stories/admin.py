@@ -1,3 +1,7 @@
 from django.contrib import admin
+from models import Question, Story, Weights, Answer
 
-# Register your models here.
+admin.site.register(Question)
+admin.site.register(Story)
+admin.site.register(Answer)
+admin.site.register(Weights)

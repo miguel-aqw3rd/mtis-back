@@ -1,3 +1,9 @@
 from django.contrib import admin
+from models import Entry, EntryGroup, Groups, Goal, Banner
 
-# Register your models here.
+admin.site.register(Entry)
+admin.site.register(EntryGroup)
+admin.site.register(Groups)
+admin.site.register(Goal)
+admin.site.register(Banner)
+

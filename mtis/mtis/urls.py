@@ -15,10 +15,15 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
 from mtisAapp import endpoints
 
 urlpatterns = [
+    path('api/v2/journal/', include("journaling.urls")),
+    path('api/v2/users/', include("users.urls")),
+    path('api/v2/stories/', include("stories.urls")),
+
+
     path('api/v1/signup', endpoints.signup),
     path('api/v1/login', endpoints.login),
     path('api/v1/logout', endpoints.logout),
